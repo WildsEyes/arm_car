@@ -1,79 +1,27 @@
 
-void setup() {
-  // put your setup code here, to run once:
-  //Initialize serial and wait for port to open:
-  Serial.begin(9600);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
-
-  initAngleMotor();   //-1初始化
-}
-
-
-void loop() {
-  // put your main code here, to run repeatedly:
-
-  float angle;
-
-  angle = getAngleSerial(); //串口获取一个控制量，为了测试
-
-  //-1
-  setAngleInc(angle,0);   //设置M1的期望角度（增量）
-  setAngleInc(angle,1);   //设置M2的期望角度（增量）
-  
-  //-2
-  MotorRun();             //电机运行主函数
-
-  //-3 获取电机当前位置
-  Serial.print(getAngleInc(0));  
-  Serial.print(' ');
-  Serial.print(getAngleInc(1));  
-
-  Serial.print('\n');
-  
-  delay(20);//50hz 运行周期
-}
-
-//串口函数
-float getAngleSerial()
-{
-  float outAngle;
-  String comdata = "";
-  while (Serial.available() > 0)
-  {
-    comdata += char(Serial.read());
-  }
-  if (comdata.length() != 0)
-  {
-    if (comdata[0] == 'a')
-    {
-      outAngle += 60;
-    }
-    if (comdata[0] == 'b')
-    {
-      outAngle -= 60;
-    }
-  }
-  return outAngle;
-}
-
-/**************************************************下面是封装的代码*****************************************************************************/
-
-#define Fs 50       //控制执行频率
-#define M_1 0
-#define M_2 1
-#define POWER_M 0.2  //PWM输出最大功率
-
+#include "angleMotor.h"
+#include "Arduino.h"
 
 long long encoderCount[2] = {0,0};
 float realAngle[2];
 float setAngle[2];
 float K_angle = 360.0 / 692.0; //每转一圈大约是692个脉冲
 
+float Kp = 0.025;
+float Ki = 0.1;
+float Kd = 0.0016;
+float Imax = 0.2;
+
+void MotorRun();    //运行主函数
+void setPWM_M1(float arg);
+void setPWM_M2(float arg);
+float pid_M1(float arg, float Ts); //输入：位置差   输出：PWM
+float pid_M2(float arg, float Ts); //输入：位置差   输出：PWM
+void encoderCallback_M1();
+void encoderCallback_M2();
 
 /******对外函数begin**************/
-void setAngleInc(float arg,unsigned char motor_addr) //设置电机的转动角度，主函数
+void setAngleInc(float arg,unsigned char motor_addr) //设置电机的转动角度
 {
   if(motor_addr<2) //检测地址合法性
   {
@@ -113,8 +61,12 @@ void initAngleMotor()
   analogWrite(6, 0);
   analogWrite(5, 0);
   /*end PWM输出*/
+  
+  /*定时中断*/
+  MsTimer2::set(1000/Fs, MotorRun); //设置中断，每1000ms进入一次中断服务程序 onTimer()
+  MsTimer2::start(); 
 }
-/******对外函数end**************/
+
 
 void MotorRun()
 {
@@ -130,12 +82,7 @@ void MotorRun()
   pwm = pid_M2(setAngle[1] - realAngle[1],Ts);
   setPWM_M2(pwm);
 }
-
-
-float Kp = 0.025;
-float Ki = 0.1;
-float Kd = 0.0016;
-float Imax = 0.2;
+/******对外函数end**************/
 
 //位置闭环PID
 //抗饱和积分
@@ -252,5 +199,3 @@ void encoderCallback_M2()
   realAngle[1] = encoderCount[1] * K_angle;
 
 }
-
-
