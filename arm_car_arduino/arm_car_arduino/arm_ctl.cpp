@@ -52,7 +52,7 @@ void arm_ctl_loop(float position[3])
   
 }
 
-void arm_clamp(float arg)
+void arm_clamp(float arg) //夹具控制
 {
   D = arg;
   limitRange2(D,0,90);
